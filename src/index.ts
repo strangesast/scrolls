@@ -19,7 +19,7 @@ function spiral(
   curlRate = (r, i) => r * 0.95, // eslint-disable-line no-unused-vars
   direction = -1,
   startAngle = Math.PI,
-  step = Math.PI / 4,
+  step = Math.PI / 8,
 ) {
   const steps = curl / step;
 
@@ -43,15 +43,21 @@ function spiral(
 
 
 const state = {
-  radiusFrac: 0.5,
+  rotation: 0,
+  radius: 0.5,
   curlFrac: 0.5,
   curlRate: 0,
+  curlAmount: 0.95,
 };
 
 function redraw() {
   const lineWidth = 4;
-  const radius = (height / 4) * state.radiusFrac;
+  const radius = (height / 5) * state.radius;
   ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(state.rotation);
+  ctx.translate(-width / 2, -height / 2);
   ctx.save();
   ctx.translate(width / 2, height / 2);
   ctx.beginPath();
@@ -60,8 +66,12 @@ function redraw() {
   ctx.moveTo(0, 0);
   ctx.lineTo(0, height / 2 - radius - lineWidth);
   ctx.translate(0, height / 2 - radius - lineWidth);
-  spiral(radius, (Math.PI * 4) * state.curlFrac,
-    (r, i) => r * 0.95 * (i + 1) ** state.curlRate, 1, 0);
+
+  const spiralArgs = [radius, (Math.PI * 4) * state.curlFrac,
+    (r, i) => r * state.curlAmount * (i + 1) ** state.curlRate];
+  // @ts-ignore
+  spiral(...spiralArgs, 1, 0);
+
   ctx.stroke();
   ctx.restore();
   ctx.save();
@@ -72,29 +82,34 @@ function redraw() {
   ctx.moveTo(0, 0);
   ctx.lineTo(0, -height / 2 + radius + lineWidth);
   ctx.translate(0, -height / 2 + radius + lineWidth);
-  spiral(radius, (Math.PI * 4) * state.curlFrac,
-    (r, i) => r * 0.95 * (i + 1) ** state.curlRate, 1, Math.PI);
+  // @ts-ignore
+  spiral(...spiralArgs, 1, Math.PI);
   ctx.stroke();
   ctx.restore();
+  ctx.restore();
 }
-
-redraw();
 
 
 const controls = [
   {
-    name: 'radius', type: 'range', min: 1, max: 100,
+    name: 'rotation', type: 'range', min: -Math.PI / 2, max: Math.PI / 2, step: 0.1,
   },
   {
-    name: 'curl', type: 'range', min: 1, max: 100,
+    name: 'radius', type: 'range', min: 0, max: 1, step: 0.1,
   },
   {
-    name: 'curlRate', type: 'range', min: 40, max: 60,
+    name: 'curlFrac', type: 'range', min: 0, max: 1, step: 0.1,
+  },
+  {
+    name: 'curlRate', type: 'range', min: 47, max: 51, step: 0.1,
+  },
+  {
+    name: 'curlAmount', type: 'range', min: 45, max: 55, step: 0.1,
   },
 
 ];
 
-{
+function drawControls() {
   const e = body.selectAll('div.control').data(controls)
     .enter().append('div')
     .classed('control', true);
@@ -103,24 +118,49 @@ const controls = [
     const s = d3.select(this);
     const id = `input-${i}-${d.name}`;
     s.append('label').attr('for', id).text(d.name);
-    s.append('input').attr('type', d.type).attr('id', id).attr('min', d.min)
-      .attr('max', d.max);
+    s.append('input').attr('type', d.type)
+      .attr('id', id)
+      .attr('min', d.min)
+      .attr('step', d.step || 1)
+      .attr('max', d.max)
+      .attr('value', state[d.name]);
   });
 
   e.on('input', (d) => {
     switch (d.name) {
-      case 'radius':
-        state.radiusFrac = d3.event.target.value / 100;
+      case 'rotation':
+        // state.rotation = (d3.event.target.value - 50) * (Math.PI / 100);
+        state.rotation = d3.event.target.value;
         break;
-      case 'curl':
-        state.curlFrac = d3.event.target.value / 100;
+      case 'radius':
+        state.radius = d3.event.target.value;
+        break;
+      case 'curlFrac':
+        state.curlFrac = d3.event.target.value;
         break;
       case 'curlRate':
         state.curlRate = (d3.event.target.value - 50) / 50;
         break;
+      case 'curlAmount':
+        state.curlAmount = (d3.event.target.value) / 50;
+        break;
       default:
         //
     }
+    const url = new URL(window.location.href);
+    url.search = new URLSearchParams(Object.entries(state)
+      .reduce((obj, [k, v]) => ({ ...obj, [k]: v.toString() }), {})).toString();
+    window.history.replaceState({ path: url.href }, '', url.href);
     redraw();
   });
 }
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  Object.keys(state).forEach((key) => {
+    state[key] = params.get(key) || state[key];
+  });
+  drawControls();
+  redraw();
+});
