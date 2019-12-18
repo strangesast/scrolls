@@ -1,8 +1,19 @@
+/* eslint-disable no-plusplus */
 import * as d3 from 'd3';
+import { active } from 'd3';
 
 const body = d3.select(document.body);
 
-body.append('p').text('Scrolls');
+const scrollTable = body.append('div').attr('id', 'scroll-table');
+{
+  scrollTable.append('p').text('Scrolls');
+  scrollTable.append('table');
+}
+const inputsTable = body.append('div').attr('id', 'inputs-table');
+{
+  inputsTable.append('p');
+  inputsTable.append('table');
+}
 
 const height = 500;
 const width = 500;
@@ -109,6 +120,247 @@ const controls = [
 
 ];
 
+let activeScroll = null;
+const scrolls: Scroll[] = [];
+
+interface Scroll {
+  id: number;
+  name: string;
+  scroll: ScrollParams;
+  stem: StemParams;
+}
+
+enum StemType {
+  Cross = 'cross',
+  Flat = 'flat',
+  Arc = 'arc',
+}
+
+interface StemParams {
+  length: number;
+  type: StemType;
+}
+
+interface ScrollParams {
+  rotation: number; // total rotation
+  radius: number; // outer radius before curling
+  curlFrac: number; // radians of rotation per step
+  curlRate: number; // radius changes by amount to the power of curlRate
+  curlAmount: number; // multiply radius by this amount each step
+}
+
+const defaultStemParams: StemParams = {
+  length: 1,
+  type: StemType.Flat,
+};
+
+const defaultScrollParams: ScrollParams = {
+  rotation: 2 * Math.PI,
+  radius: 1,
+  curlFrac: Math.PI / 4,
+  curlRate: 0,
+  curlAmount: 0.95,
+}
+
+let lastScrollIndex = 0;
+
+function createScroll(
+  id = ++lastScrollIndex,
+  name = `Scroll ${id}`,
+  scrollArg: Partial<ScrollParams> = {},
+  stemArg: Partial<StemParams> = {},
+): void {
+  const stem = { ...stemArg, ...defaultStemParams };
+  const scroll = { ...scrollArg, ...defaultScrollParams };
+  scrolls.push({ id, name, stem, scroll });
+  updateScrollTable();
+}
+
+const inputs = [
+  {
+    type: 'number',
+    label: 'Stem Length',
+    path: 'stem.length',
+    step: 0.1,
+    min: 0,
+    max: 10,
+  },
+  {
+    type: 'radio',
+    label: 'Stem Type',
+    options: Object.keys(StemType).map(key => ({key, value: StemType[key]})),
+    path: 'stem.type',
+  },
+  {
+    type: 'number',
+    label: 'Scroll Rotation',
+    path: 'scroll.rotation',
+    step: 0.1,
+    min: 0,
+    max: Math.PI * 4,
+  },
+  {
+    type: 'number',
+    label: 'Scroll Radius',
+    path: 'scroll.radius',
+    step: 0.1,
+    min: 0,
+    max: 10,
+  },
+  {
+    type: 'number',
+    label: 'Scroll Curl Step',
+    path: 'scroll.curlFrac',
+    step: 0.1,
+    min: 0.01,
+    max: Math.PI,
+  },
+  {
+    type: 'number',
+    label: 'Scroll Curl Rate',
+    path: 'scroll.curlRate',
+    step: 0.1,
+    min: 0,
+    max: 10,
+  },
+  {
+    type: 'number',
+    label: 'Scroll Curl Amount',
+    path: 'scroll.curlAmount',
+    step: 0.1,
+    min: 0,
+    max: 10,
+  },
+];
+
+function setActiveScroll(scroll: Scroll): void {
+  activeScroll = scroll;
+  updateInputsTable();
+}
+
+function removeScroll(index: number): void {
+  const [scroll] = scrolls.splice(index, 1);
+  if (scroll === activeScroll) {
+    activeScroll = null;
+    hideInputsTable();
+  }
+  updateScrollTable();
+}
+
+function hideInputsTable() {
+  inputsTable.style('visibility', 'hidden');
+}
+
+function updateScrollTable() {
+  scrollTable.select('table').selectAll('tr').data(scrolls, (s: any) => s.id).join(
+    (sel) => {
+      const e = sel.append('tr');
+      e.append('td').text(scroll => scroll.name);
+      e.append('td').append('button').text('activate').on('click', (d) => {
+        setActiveScroll(d);
+      });
+      e.append('td').append('button').text('remove').on('click', (d) => {
+        let i = 0;
+        // eslint-disable-next-line no-cond-assign
+        if ((i = scrolls.indexOf(d)) > -1) {
+          removeScroll(i);
+        }
+      });
+      return e;
+    },
+    null,
+    (sel) => sel.remove(),
+  );
+}
+
+function updateInputsTable() {
+  if (activeScroll == null) {
+    return;
+  }
+  inputsTable.select('p').text(`${activeScroll.name} Attributes`);
+  const sel = inputsTable.style('visibility', 'visible').select('table').selectAll('tr').data(inputs, (d: any) => d.path);
+  const sele = sel.enter().append('tr')
+
+  // eslint-disable-next-line func-names
+  sele.each(function (props) {
+    const tr = d3.select(this);
+    const { label } = props;
+    const base = label.toLowerCase().split(' ').join('-');
+    switch (props.type) {
+      case 'number': {
+        tr.append('td').append('label')
+          .attr('for', base).text(label);
+        tr.append('td')
+          .append('input')
+          .attr('type', 'number')
+          .attr('min', props.min)
+          .attr('max', props.max)
+          .attr('step', props.step)
+          .attr('type', 'number');
+        break;
+      }
+      case 'radio': {
+        const { options } = props;
+        tr.append('label').text(label);
+        const d = tr.append('td');
+        for (let i = 0; i < options.length; i++) {
+          const {key, value} = options[i];
+          const id = `${base}-${i}`;
+          const dd = d.append('div');
+          const inp = dd.append('input')
+            .attr('type', 'radio')
+            .attr('id', id)
+            .attr('name', base)
+            .attr('value', value);
+          dd.append('label').attr('for', id).text(key);
+        }
+        break;
+      }
+      default: {
+        // none
+      }
+    }
+  });
+  sele.on('input', (d) => {
+    const newValue = d3.event.srcElement.value; // is string
+    if (activeScroll != null) {
+      const path = d.path.split('.');
+      const [keys, key] = [path.slice(0, 1), path[path.length - 1]];
+      const obj = keys.reduce((_obj, k) => _obj[k], activeScroll);
+      // const currentValue = obj[key];
+      switch (d.type) {
+        case 'number':
+          obj[key] = parseFloat(newValue);
+          break;
+        default:
+          obj[key] = newValue;
+      }
+    }
+  });
+
+  // eslint-disable-next-line func-names
+  sele.merge(sel as any).each(function (d) {
+    const path = d.path.split('.');
+    // get the current value;
+    const cv = path.reduce((obj, k) => obj[k], activeScroll);
+    const sel = d3.select(this);
+    switch (d.type) {
+      case 'number':
+        sel.select('input').property('value', cv);
+        break;
+      case 'radio':
+        // eslint-disable-next-line func-names
+        sel.selectAll('input[type=radio]').property('checked', function () {
+          return (this as any).value === cv;
+        });
+        break;
+      default: {
+        // pass
+      }
+    }
+  });
+}
+
 function drawControls() {
   const e = body.selectAll('div.control').data(controls)
     .enter().append('div')
@@ -157,10 +409,16 @@ function drawControls() {
 
 
 document.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(window.location.search);
-  Object.keys(state).forEach((key) => {
-    state[key] = params.get(key) || state[key];
+  body.append('div').append('button').text('Add scroll').on('click', () => {
+    createScroll();
   });
-  drawControls();
-  redraw();
+
+  // updateInputsTable();
+
+  // const params = new URLSearchParams(window.location.search);
+  // Object.keys(state).forEach((key) => {
+  //   state[key] = params.get(key) || state[key];
+  // });
+  // drawControls();
+  // redraw();
 });
