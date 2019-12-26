@@ -1,14 +1,27 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin')
+const package = require('./package.json')
 
 
 module.exports = {
   mode: 'development',
-  entry: './src/index.ts',
+  entry: {
+    index: './src/index.ts',
+    vendor: Object.keys(package.dependencies),
+    drag: './src/drag.ts',
+  },
   plugins: [
     new HtmlWebpackPlugin({
       title: 'Scrolls',
-      template: 'src/index.html'
+      chunks: ['vendor', 'index'],
+      template: 'src/index.html',
+      filename: 'index.html'
+    }),
+    new HtmlWebpackPlugin({
+      title: 'Scrolls Drag',
+      chunks: ['vendor', 'drag'],
+      template: 'src/drag.html',
+      filename: 'drag.html'
     })
   ],
   module: {
@@ -20,11 +33,11 @@ module.exports = {
       }
     ]
   },
+  output: {
+    filename: '[name].bundle.js',
+    // path: path.resolve(__dirname, 'dist')
+  },
   resolve: {
     extensions: ['.ts', '.js']
   },
-  output: {
-    filename: 'bundle.js',
-    path: path.resolve(__dirname, 'dist')
-  }
 };
